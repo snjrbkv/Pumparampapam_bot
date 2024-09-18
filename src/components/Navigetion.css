@@ -1,0 +1,29 @@
+/* Общий стиль навигационной панели */
+.navigation {
+  display: flex;
+  justify-content: space-around;
+  background-color: #2c2c2c;
+  padding: 10px 0;
+  position: fixed;
+  bottom: 0;
+  width: 100%;
+  z-index: 3;
+}
+
+/* Стиль элемента навигации */
+.nav-item {
+  color: #a0a0a0;
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+/* Активный элемент меняет цвет */
+.nav-item.active {
+  color: #b4f2d0;
+}
+
+/* Стиль значков */
+.icon {
+  font-size: 24px;
+}
