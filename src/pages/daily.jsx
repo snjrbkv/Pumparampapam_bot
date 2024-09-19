@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom"; // Измените useHistory на useNavigate
 import "../App.css";
-import Navigetion from "../components/navigetion";
+import Navigation from "../components/navigetion"; // Предположим, что правильное название файла - navigation
 import StarBtn from "../components/starBtn";
 
 const Daily = () => {
@@ -10,12 +10,12 @@ const Daily = () => {
   const [tasks, setTasks] = useState([]);
   const [initData, setInitData] = useState(null);
   const [taskStatus, setTaskStatus] = useState({});
+  const navigate = useNavigate(); // Используйте useNavigate вместо useHistory
 
   // Получаем initData из Telegram WebApp
   useEffect(() => {
     const telegram = window.Telegram?.WebApp;
     if (telegram) {
-      // Decode initData for proper usage
       const decodedInitData = decodeURIComponent(telegram.initData);
       setInitData(decodedInitData);
     } else {
@@ -30,7 +30,7 @@ const Daily = () => {
         try {
           const response = await axios.post(
             "https://api.bot-dev.uz/api/get-tasks/",
-            { initData }, // sending decoded initData
+            { initData },
             {
               headers: {
                 "Content-Type": "application/json; charset=utf-8",
@@ -39,11 +39,13 @@ const Daily = () => {
           );
           setTasks(response.data.tasks || []);
 
-          // Инициализируем статус всех задач как "Complete"
-          const initialStatus = {};
-          response.data.tasks.forEach((task) => {
-            initialStatus[task.id] = "Complete";
-          });
+          const initialStatus = response.data.tasks.reduce(
+            (acc, task) => ({
+              ...acc,
+              [task.id]: "Complete",
+            }),
+            {}
+          );
           setTaskStatus(initialStatus);
         } catch (error) {
           console.error("Error fetching tasks:", error);
@@ -54,20 +56,18 @@ const Daily = () => {
     }
   }, [initData]);
 
-  // Функция для изменения статуса конкретной задачи на "Verify"
-  const handleButtonClick = async (taskId) => {
-    console.log("Button clicked for task:", taskId);
-    console.log("initData:", initData); // Логируем initData для проверки
+  const handleCompleteClick = (task) => {
+    // Редирект на `link` задачи с помощью useNavigate
+    if (task.link) {
+      navigate(task.link);
+    }
+  };
 
+  const handleVerifyClick = async (taskId) => {
     try {
-      // Формируем данные для отправки
-      const requestData = { initData, task: taskId };
-      console.log("Request data being sent:", requestData); // Логируем данные запроса
-
-      // Отправляем запрос на подтверждение выполнения задачи
       const response = await axios.post(
-        `https://api.bot-dev.uz/api/confirm-task/${taskId}`, // taskId передается в URL
-        { initData }, // ensure proper payload
+        `https://api.bot-dev.uz/api/confirm-task/${taskId}`,
+        { initData },
         {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
@@ -75,12 +75,7 @@ const Daily = () => {
         }
       );
 
-      console.log("Response from API:", response.data); // Логируем ответ от API
-
-      if (response.data.ok === true) {
-        console.log("Task verified:", taskId);
-
-        // Обновляем статус задачи на "Verify"
+      if (response.data.ok) {
         setTaskStatus((prevStatus) => ({
           ...prevStatus,
           [taskId]: "Verify",
@@ -96,7 +91,6 @@ const Daily = () => {
   return (
     <div className="daily-in">
       <div className="toggle-btn-group">
-        {/* Переключение вкладок */}
         <Link
           to="/daily"
           className={`toggle-btn ${
@@ -122,8 +116,6 @@ const Daily = () => {
       <hr className="daily-hr" />
       <StarBtn />
       <hr />
-
-      {/* Отображение списка задач */}
       <ul className="task-list">
         {tasks.length > 0 ? (
           tasks.map((task) => (
@@ -135,14 +127,12 @@ const Daily = () => {
                   <p className="task-day">{task.description}</p>
                 </div>
                 <div className="task-buttons">
-                  {/* Кнопка для подтверждения задачи */}
                   <button
                     className="task-btn"
-                    onClick={() => handleButtonClick(task.id)} // Передаем task.id в обработчик
-                    disabled={taskStatus[task.id] === "Verify"} // Отключаем кнопку, если статус "Verify"
+                    onClick={() => handleCompleteClick(task)}
+                    disabled={taskStatus[task.id] === "Verify"}
                   >
-                    {taskStatus[task.id] === "Verify" ? "Verify" : "Complete"}{" "}
-                    {/* Отображаем текст кнопки в зависимости от статуса */}
+                    {taskStatus[task.id] === "Verify" ? "Verified" : "Complete"}
                   </button>
                 </div>
               </li>
@@ -150,11 +140,11 @@ const Daily = () => {
             </React.Fragment>
           ))
         ) : (
-          <p>Loading tasks...</p> // Показать, если задачи загружаются
+          <p>Loading tasks...</p>
         )}
         <hr className="last-hr" />
       </ul>
-      <Navigetion />
+      <Navigation />
     </div>
   );
 };
