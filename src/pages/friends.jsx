@@ -20,8 +20,6 @@ const Friends = () => {
       const user = telegram.initDataUnsafe?.user;
 
       if (user) {
-        console.log("Telegram user data:", user);
-
         setInitData(telegram.initData); // Сохраняем initData для последующей отправки
       } else {
         console.error("User data is not available.");
@@ -66,8 +64,6 @@ const Friends = () => {
           }
 
           setReferralLink(response.data?.referral_link || ""); // Сохраняем реферальную ссылку
-        } else {
-          console.log("User UUID not found in localStorage");
         }
       } catch (error) {
         console.error("Error fetching referals:", error);

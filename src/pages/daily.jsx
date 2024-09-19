@@ -11,38 +11,40 @@ const Daily = () => {
   const [initData, setInitData] = useState(null);
   const [taskStatus, setTaskStatus] = useState({});
 
-  // Telegram WebApp dan initData ni olish
+  // Получаем initData из Telegram WebApp
   useEffect(() => {
     const telegram = window.Telegram?.WebApp;
     if (telegram) {
-      const initData = telegram.initData;
-      setInitData(initData);
+      // Decode initData for proper usage
+      const decodedInitData = decodeURIComponent(telegram.initData);
+      setInitData(decodedInitData);
     } else {
       console.error("Telegram WebApp not found.");
     }
   }, []);
 
-  // initData bilan vazifalarni API orqali olish
+  // Получаем список задач с сервера после получения initData
   useEffect(() => {
     if (initData) {
       const fetchTasks = async () => {
         try {
           const response = await axios.post(
             "https://api.bot-dev.uz/api/get-tasks/",
-            { initData },
+            { initData }, // sending decoded initData
             {
               headers: {
                 "Content-Type": "application/json; charset=utf-8",
               },
             }
           );
-          console.log("Tasks from API:", response.data);
+          setTasks(response.data.tasks || []);
 
-          if (response.data && Array.isArray(response.data.tasks)) {
-            setTasks(response.data.tasks);
-          } else {
-            console.error("Unexpected API response format:", response.data);
-          }
+          // Инициализируем статус всех задач как "Complete"
+          const initialStatus = {};
+          response.data.tasks.forEach((task) => {
+            initialStatus[task.id] = "Complete";
+          });
+          setTaskStatus(initialStatus);
         } catch (error) {
           console.error("Error fetching tasks:", error);
         }
@@ -52,54 +54,49 @@ const Daily = () => {
     }
   }, [initData]);
 
-  // Taskni tasdiqlash va "Completed" holatiga o'tkazish
-  const handleVerifyClick = async (task) => {
+  // Функция для изменения статуса конкретной задачи на "Verify"
+  const handleButtonClick = async (taskId) => {
+    console.log("Button clicked for task:", taskId);
+    console.log("initData:", initData); // Логируем initData для проверки
+
     try {
+      // Формируем данные для отправки
+      const requestData = { initData, task: taskId };
+      console.log("Request data being sent:", requestData); // Логируем данные запроса
+
+      // Отправляем запрос на подтверждение выполнения задачи
       const response = await axios.post(
-        `https://api.bot-dev.uz/api/confirm-task/${task.uuid}`,
-        { initData },
+        `https://api.bot-dev.uz/api/confirm-task/${taskId}`, // taskId передается в URL
+        { initData }, // ensure proper payload
         {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
           },
         }
       );
-      console.log("Task verified:", response.data);
 
-      // Agar API dan ok true kelsa, tugma "Completed" ga aylanadi
-      if (response.data.ok) {
+      console.log("Response from API:", response.data); // Логируем ответ от API
+
+      if (response.data.ok === true) {
+        console.log("Task verified:", taskId);
+
+        // Обновляем статус задачи на "Verify"
         setTaskStatus((prevStatus) => ({
           ...prevStatus,
-          [task.id]: "completed",
+          [taskId]: "Verify",
         }));
       } else {
-        setTaskStatus((prevStatus) => ({
-          ...prevStatus,
-          [task.id]: "verify",
-        }));
-        console.error("Task verification failed.");
+        console.error("Task verification failed:", taskId);
       }
     } catch (error) {
       console.error("Error verifying task:", error);
     }
   };
 
-  // Tugmani bosish holatini o'zgartirish
-  const handleButtonClick = (task) => {
-    if (task.completed) {
-      // Открываем ссылку в новой вкладке/окне
-      window.open(task.link, "_blank");
-    } else {
-      setTaskStatus((prevStatus) => ({
-        ...prevStatus,
-        [task.id]: "verify",
-      }));
-    }
-  };
-
   return (
     <div className="daily-in">
       <div className="toggle-btn-group">
+        {/* Переключение вкладок */}
         <Link
           to="/daily"
           className={`toggle-btn ${
@@ -125,6 +122,8 @@ const Daily = () => {
       <hr className="daily-hr" />
       <StarBtn />
       <hr />
+
+      {/* Отображение списка задач */}
       <ul className="task-list">
         {tasks.length > 0 ? (
           tasks.map((task) => (
@@ -136,20 +135,14 @@ const Daily = () => {
                   <p className="task-day">{task.description}</p>
                 </div>
                 <div className="task-buttons">
+                  {/* Кнопка для подтверждения задачи */}
                   <button
                     className="task-btn"
-                    onClick={() =>
-                      taskStatus[task.id] === "verify"
-                        ? handleVerifyClick(task)
-                        : handleButtonClick(task)
-                    }
-                    disabled={taskStatus[task.id] === "completed"}
+                    onClick={() => handleButtonClick(task.id)} // Передаем task.id в обработчик
+                    disabled={taskStatus[task.id] === "Verify"} // Отключаем кнопку, если статус "Verify"
                   >
-                    {taskStatus[task.id] === "completed"
-                      ? "Completed"
-                      : taskStatus[task.id] === "verify"
-                      ? "Verify"
-                      : "Complete"}
+                    {taskStatus[task.id] === "Verify" ? "Verify" : "Complete"}{" "}
+                    {/* Отображаем текст кнопки в зависимости от статуса */}
                   </button>
                 </div>
               </li>
@@ -157,7 +150,7 @@ const Daily = () => {
             </React.Fragment>
           ))
         ) : (
-          <p>Loading tasks...</p>
+          <p>Loading tasks...</p> // Показать, если задачи загружаются
         )}
         <hr className="last-hr" />
       </ul>

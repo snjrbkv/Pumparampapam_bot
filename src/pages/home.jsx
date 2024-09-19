@@ -15,16 +15,12 @@ const Home = () => {
   const [initData, setInitData] = useState(null);
 
   useEffect(() => {
-    console.log("useEffect triggered");
-
     const telegram = window.Telegram?.WebApp;
     if (telegram) {
       telegram.ready();
       const user = telegram.initDataUnsafe?.user;
 
       if (user) {
-        console.log("Telegram user data:", user);
-
         const userData = {
           username: user.username || "username",
           user_first_name: user.first_name || "first_name",
@@ -54,11 +50,7 @@ const Home = () => {
           },
         })
         .then((response) => {
-          console.log("Server response:", response.data);
-
           if (response.data.ok) {
-            console.log("Data is ok");
-
             axios
               .post("https://api.bot-dev.uz/api/get-user/", dataToSend, {
                 headers: {
@@ -73,7 +65,6 @@ const Home = () => {
 
                 if (userUuid) {
                   localStorage.setItem("userUuid", userUuid);
-                  console.log("UUID saved:", userUuid);
 
                   // Обновляем фото пользователя
                   setUserPhoto(userPhoto || icons.profile);
