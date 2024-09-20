@@ -34,6 +34,7 @@ const StarBtnModal = () => {
       return newDays;
     });
   };
+  // hello
 
   const handleConfirm = () => {
     setIsConfirmed(true); // Set confirmed state to true
