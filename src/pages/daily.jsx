@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Link, useNavigate } from "react-router-dom"; // Измените useHistory на useNavigate
+import { Link } from "react-router-dom";
 import "../App.css";
-import Navigation from "../components/navigetion"; // Предположим, что правильное название файла - navigation
+import Navigation from "../components/navigetion";
 import StarBtn from "../components/starBtn";
 
 const Daily = () => {
@@ -10,9 +10,8 @@ const Daily = () => {
   const [tasks, setTasks] = useState([]);
   const [initData, setInitData] = useState(null);
   const [taskStatus, setTaskStatus] = useState({});
-  const navigate = useNavigate(); // Используйте useNavigate вместо useHistory
+  const [loadingStatus, setLoadingStatus] = useState({});
 
-  // Получаем initData из Telegram WebApp
   useEffect(() => {
     const telegram = window.Telegram?.WebApp;
     if (telegram) {
@@ -23,13 +22,12 @@ const Daily = () => {
     }
   }, []);
 
-  // Получаем список задач с сервера после получения initData
   useEffect(() => {
     if (initData) {
       const fetchTasks = async () => {
         try {
           const response = await axios.post(
-            "https://api.bot-dev.uz/api/get-tasks/",
+            "https://api.bot-dev.uz/api/get-tasks/?type=daily",
             { initData },
             {
               headers: {
@@ -37,12 +35,15 @@ const Daily = () => {
               },
             }
           );
-          setTasks(response.data.tasks || []);
 
-          const initialStatus = response.data.tasks.reduce(
+          const loadedTasks = response.data.tasks || [];
+          setTasks(loadedTasks);
+
+          // Update task status based on the response
+          const initialStatus = loadedTasks.reduce(
             (acc, task) => ({
               ...acc,
-              [task.id]: "Complete",
+              [task.id]: task.completed ? "Completed" : "Complete",
             }),
             {}
           );
@@ -56,18 +57,29 @@ const Daily = () => {
     }
   }, [initData]);
 
-  const handleCompleteClick = (task) => {
-    // Редирект на `link` задачи с помощью useNavigate
+  const handleCompleteClick = async (task) => {
     if (task.link) {
-      navigate(task.link);
+      window.open(task.link, "_blank");
+      setTaskStatus((prevStatus) => ({
+        ...prevStatus,
+        [task.id]: "Verify",
+      }));
     }
   };
 
-  const handleVerifyClick = async (taskId) => {
+  const handleVerifyClick = async (task) => {
+    setLoadingStatus((prevStatus) => ({
+      ...prevStatus,
+      [task.id]: true,
+    }));
+
     try {
       const response = await axios.post(
-        `https://api.bot-dev.uz/api/confirm-task/${taskId}`,
-        { initData },
+        `https://api.bot-dev.uz/api/confirm-task/${task.uuid}`,
+        {
+          taskId: task.id,
+          initData,
+        },
         {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
@@ -75,16 +87,19 @@ const Daily = () => {
         }
       );
 
-      if (response.data.ok) {
+      if (response.data.ok === true) {
         setTaskStatus((prevStatus) => ({
           ...prevStatus,
-          [taskId]: "Verify",
+          [task.id]: "Completed",
         }));
-      } else {
-        console.error("Task verification failed:", taskId);
       }
     } catch (error) {
-      console.error("Error verifying task:", error);
+      console.error("Error confirming task:", error);
+    } finally {
+      setLoadingStatus((prevStatus) => ({
+        ...prevStatus,
+        [task.id]: false,
+      }));
     }
   };
 
@@ -127,13 +142,26 @@ const Daily = () => {
                   <p className="task-day">{task.description}</p>
                 </div>
                 <div className="task-buttons">
-                  <button
-                    className="task-btn"
-                    onClick={() => handleCompleteClick(task)}
-                    disabled={taskStatus[task.id] === "Verify"}
-                  >
-                    {taskStatus[task.id] === "Verify" ? "Verified" : "Complete"}
-                  </button>
+                  {taskStatus[task.id] === "Completed" ? (
+                    <button className="task-btn" disabled>
+                      Completed
+                    </button>
+                  ) : taskStatus[task.id] === "Verify" ? (
+                    <button
+                      className="task-btn"
+                      onClick={() => handleVerifyClick(task)}
+                      disabled={loadingStatus[task.id]}
+                    >
+                      {loadingStatus[task.id] ? "Loading..." : "Verify"}
+                    </button>
+                  ) : (
+                    <button
+                      className="task-btn"
+                      onClick={() => handleCompleteClick(task)}
+                    >
+                      Complete
+                    </button>
+                  )}
                 </div>
               </li>
               {tasks.indexOf(task) < tasks.length - 1 && <hr />}

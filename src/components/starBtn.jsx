@@ -20,7 +20,8 @@ const StarBtnModal = () => {
   const incrementDays = () => {
     setDays((prevDays) => {
       const newDays = Math.min(100, prevDays + 1); // Increment days by 1 but not more than 100
-      setTons(newDays * 2); // Calculate TON based on the new days value (2 TON per day)
+      const newTons = newDays * 0.002; // Calculate TON based on the new days value (2 TON per day)
+      setTons(newTons.toFixed(3)); // Round to 4 decimal places
       return newDays;
     });
   };
@@ -28,7 +29,8 @@ const StarBtnModal = () => {
   const decrementDays = () => {
     setDays((prevDays) => {
       const newDays = Math.max(0, prevDays - 1); // Decrement days by 1 but not less than 0
-      setTons(newDays * 2); // Calculate TON based on the new days value (2 TON per day)
+      const newTons = newDays * 0.002; // Calculate TON based on the new days value (2 TON per day)
+      setTons(newTons.toFixed(3)); // Round to 4 decimal places
       return newDays;
     });
   };
