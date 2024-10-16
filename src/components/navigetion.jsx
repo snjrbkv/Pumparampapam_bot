@@ -78,7 +78,7 @@ const Navigation = () => {
             <div>Pump</div>
           </Link>
         </Nav.Item>
-
+        {/* upload */}
         <Nav.Item>
           <Link
             to="/daily"
