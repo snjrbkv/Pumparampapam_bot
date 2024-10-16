@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
-import icons from "../icons/icons";
-import Navigation from "../components/navigetion";
+import icons from "../assets/icons/icons.jsx";
+import Navigation from "../components/navigetion.jsx";
 import "../App.css";
 import { Link } from "react-router-dom";
-
+import images from "../assets/images/images.jsx";
 const Home = () => {
   const [userInfo, setUserInfo] = useState({
     username: "",
@@ -14,6 +14,7 @@ const Home = () => {
   const [userPhoto, setUserPhoto] = useState(icons.profile);
   const [initData, setInitData] = useState(null);
 
+  // SWC: Move initData effect to only run when the component is mounted
   useEffect(() => {
     const telegram = window.Telegram?.WebApp;
     if (telegram) {
@@ -28,7 +29,7 @@ const Home = () => {
         };
 
         setUserInfo(userData);
-        setInitData(telegram.initData);
+        setInitData(telegram.initData); // Set initData when the user is available
       } else {
         console.error("User data is not available.");
       }
@@ -39,20 +40,35 @@ const Home = () => {
     }
   }, []);
 
+  // SWC: Store TON_FOR_TASK and TON_FOR_REFERRAL from API response into localStorage
   useEffect(() => {
+    // clear localStorage everything
     if (initData) {
       const dataToSend = { initData };
 
       axios
-        .post("https://api.bot-dev.uz/api/check-user/", dataToSend, {
+        .post("https://api.pumparam.ru/api/check-user/", dataToSend, {
           headers: {
             "Content-Type": "application/json; charset=utf-8",
           },
         })
         .then((response) => {
           if (response.data.ok) {
+            const wallet = response.data?.extra?.WALLET;
+            const boost = response.data?.extra?.BOOST;
+
+            if (boost) {
+              localStorage.setItem("TON_FOR_TASK", boost.TON_FOR_TASK);
+              localStorage.setItem("TON_FOR_REFERRAL", boost.TON_FOR_REFERRAL);
+              localStorage.setItem(
+                "TOTAL_DAY_FOR_TASK",
+                boost.TOTAL_DAY_FOR_TASK
+              );
+              localStorage.setItem("TO_WALLET", wallet);
+            }
+
             axios
-              .post("https://api.bot-dev.uz/api/get-user/", dataToSend, {
+              .post("https://api.pumparam.ru/api/get-user/", dataToSend, {
                 headers: {
                   "Content-Type": "application/json; charset=utf-8",
                 },
@@ -60,35 +76,34 @@ const Home = () => {
               .then((res) => {
                 const userUuid = res.data?.user?.uuid;
                 const userPhoto =
-                  "https://api.bot-dev.uz/" + res.data?.user?.photo;
+                  "https://api.pumparam.ru/" + res.data?.user?.photo;
                 const userName = res.data?.user?.username;
 
                 if (userUuid) {
                   localStorage.setItem("userUuid", userUuid);
 
-                  // Обновляем фото пользователя
-                  setUserPhoto(userPhoto || icons.profile);
+                  setUserPhoto(userPhoto || icons.profile); // Update user photo
                   setUserInfo((prevState) => ({
                     ...prevState,
                     username: userName,
                   }));
                 } else {
                   console.error("UUID not found. Closing WebApp.");
-                  window.Telegram.WebApp.close(); // Закрыть приложение, если UUID не найден
+                  window.Telegram.WebApp.close(); // Close app if UUID not found
                 }
               })
               .catch((error) => {
                 console.error("Error getting user data:", error);
-                window.Telegram.WebApp.close(); // Закрыть приложение при ошибке
+                window.Telegram.WebApp.close(); // Close app on error
               });
           } else if (response.data.error) {
             console.error("Error in data:", response.data.error);
-            window.Telegram.WebApp.close(); // Закрыть приложение при ошибке в данных
+            window.Telegram.WebApp.close(); // Close app if there's an error
           }
         })
         .catch((error) => {
           console.error("Error sending data:", error);
-          window.Telegram.WebApp.close(); // Закрыть приложение при ошибке отправки данных
+          window.Telegram.WebApp.close(); // Close app on sending data error
         });
     }
   }, [initData]);
@@ -96,21 +111,30 @@ const Home = () => {
   return (
     <div className="home-in">
       <div className="user-info">
-        <span className="user-profile-img">
-          <img
-            src={userPhoto}
-            alt="User profile"
-            onError={(e) => (e.target.src = icons.profile)}
-          />
-        </span>
-        <h3>
-          {userInfo.username
-            ? `@${userInfo.username}`
-            : userInfo.user_first_name}
-        </h3>
+        <div className="user-img_name">
+          <span className="user-profile-img">
+            <img
+              src={userPhoto}
+              alt="User profile"
+              onError={(e) => (e.target.src = icons.profile)}
+            />
+          </span>
+          <h3>
+            {userInfo.username
+              ? `@${userInfo.username}`
+              : userInfo.user_first_name}
+          </h3>
+        </div>
+
+        <Link to="/infl" className="infl">
+          <h3>Infl</h3>
+          <div className="infl-img">
+            <img src={icons.infl} alt="" />
+          </div>
+        </Link>
       </div>
       <div className="home-tokens">
-        <img className="home-img" src={icons.loadingImg} alt="Loading" />
+        <img className="home-img" src={images.gif} alt="Loading" />
         <h2>100.000 PUMP</h2>
       </div>
       <Link to="/friends" className="green-btn text-decoration-none">

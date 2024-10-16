@@ -1,39 +1,194 @@
 import React, { useState, useEffect } from "react";
+import axios from "axios";
 import { Link } from "react-router-dom";
 import "../App.css";
-import Navigetion from "../components/navigetion";
+import Navigation from "../components/navigetion.jsx";
 
 const OneTime = () => {
   const [activeTab, setActiveTab] = useState("oneTimeTasks");
-  const [taskStatus, setTaskStatus] = useState({}); // Track task statuses
+  const [tasks, setTasks] = useState([]);
+  const [initData, setInitData] = useState(null);
+  const [taskStatus, setTaskStatus] = useState({});
+  const [loadingStatus, setLoadingStatus] = useState({});
+  const [verifyClicks, setVerifyClicks] = useState({}); // Для отслеживания кликов по Verify
+  const [boosted, setBoosted] = useState({});
 
-  // Load task status from localStorage on component mount
-  useEffect(() => {
-    const savedStatus = localStorage.getItem("taskStatus");
-    if (savedStatus) {
-      setTaskStatus(JSON.parse(savedStatus));
+
+   // Получение начальных данных с Telegram WebApp
+   useEffect(() => {
+    const telegram = window.Telegram?.WebApp;
+    if (telegram) {
+      const decodedInitData = decodeURIComponent(telegram.initData);
+      setInitData(decodedInitData);
+
+      const getUserData = async () => {
+        try {
+          const res = await axios.post(
+            "https://api.pumparam.ru/api/get-user/",
+            { initData: telegram.initData },
+            {
+              headers: {
+                "Content-Type": "application/json; charset=utf-8",
+              },
+            }
+          );
+          setBoosted(res.data?.boosted);
+        } catch (error) {
+          console.error("Error getting user data:", error);
+          window.location.reload();
+        }
+      };
+      getUserData();
+    } else {
+      console.error("Telegram WebApp not found.");
     }
   }, []);
 
-  // Save task status to localStorage whenever taskStatus changes
   useEffect(() => {
-    localStorage.setItem("taskStatus", JSON.stringify(taskStatus));
-  }, [taskStatus]);
+    if (initData) {
+      const fetchTasks = async () => {
+        try {
+          const response = await axios.post(
+            "https://api.pumparam.ru/api/get-tasks/?type=one-time",
+            { initData },
+            {
+              headers: {
+                "Content-Type": "application/json; charset=utf-8",
+              },
+            }
+          );
 
-  const handleTaskClick = (index) => {
-    // Set the task to "in-progress" when clicked
-    setTaskStatus((prevStatus) => ({
+          const loadedTasks = response.data.tasks || [];
+          setTasks(loadedTasks);
+
+          // Установка начального статуса задач
+          const initialStatus = loadedTasks.reduce(
+            (acc, task) => ({
+              ...acc,
+              [task.id]: task.completed ? "Completed" : "Start",
+            }),
+            {}
+          );
+          setTaskStatus(initialStatus);
+        } catch (error) {
+          console.error("Error fetching tasks:", error);
+        }
+      };
+
+      fetchTasks();
+    }
+  }, [initData]);
+
+  const handleCompleteClick = async (task) => {
+    setLoadingStatus((prevStatus) => ({
       ...prevStatus,
-      [index]: "in-progress", // Start loading
+      [task.id]: true,
     }));
 
-    // Simulate a delay before marking the task as "completed"
-    setTimeout(() => {
+    // Если task.link пустой, равен '.' или '0', отправляем запрос на сервер
+    if (!task.link || task.link === "." || task.link === "0") {
+      try {
+        const response = await axios.post(
+          `https://api.pumparam.ru/api/confirm-task/${task.uuid}`,
+          {
+            taskId: task.id,
+            initData,
+          },
+          {
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+            },
+          }
+        );
+
+        if (response.data.ok === true) {
+          setTaskStatus((prevStatus) => ({
+            ...prevStatus,
+            [task.id]: "Completed",
+          }));
+        } else {
+          console.error("Failed to confirm task.");
+        }
+      } catch (error) {
+        console.error("Error confirming task:", error);
+      }
+    } else {
+      // Открываем ссылку в Telegram и меняем статус на Verify
+      Telegram.WebApp.openLink(task.link);
       setTaskStatus((prevStatus) => ({
         ...prevStatus,
-        [index]: "completed", // Mark the task as completed after delay
+        [task.id]: "Verify",
       }));
-    }, 2000); // 2 seconds delay for loading effect
+      setVerifyClicks((prevClicks) => ({
+        ...prevClicks,
+        [task.id]: 0, // Сброс количества кликов при нажатии "Start"
+      }));
+    }
+
+    setLoadingStatus((prevStatus) => ({
+      ...prevStatus,
+      [task.id]: false,
+    }));
+  };
+
+  const handleVerifyClick = async (task) => {
+    const currentClicks = verifyClicks[task.id] || 0;
+
+    // Если уже 1 раз нажали на Verify и статус не изменился, вернуть на Start
+    if (currentClicks >= 1) {
+      setTaskStatus((prevStatus) => ({
+        ...prevStatus,
+        [task.id]: "Start",
+      }));
+      setVerifyClicks((prevClicks) => ({
+        ...prevClicks,
+        [task.id]: 0, // Сброс счётчика
+      }));
+      return;
+    }
+
+    setLoadingStatus((prevStatus) => ({
+      ...prevStatus,
+      [task.id]: true,
+    }));
+
+    try {
+      const response = await axios.post(
+        `https://api.pumparam.ru/api/confirm-task/${task.uuid}`,
+        {
+          taskId: task.id,
+          initData,
+        },
+        {
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+          },
+        }
+      );
+
+      if (response.data.ok === true) {
+        setTaskStatus((prevStatus) => ({
+          ...prevStatus,
+          [task.id]: "Completed",
+        }));
+      } else {
+        setVerifyClicks((prevClicks) => ({
+          ...prevClicks,
+          [task.id]: currentClicks + 1, // Увеличиваем счётчик кликов
+        }));
+      }
+    } catch (error) {
+      console.error("Error confirming task:", error);
+      setVerifyClicks((prevClicks) => ({
+        ...prevClicks,
+        [task.id]: currentClicks + 1, // Увеличиваем счётчик кликов в случае ошибки
+      }));
+    } finally {
+      setLoadingStatus((prevStatus) => ({
+        ...prevStatus,
+        [task.id]: false,
+      }));
+    }
   };
 
   return (
@@ -62,44 +217,52 @@ const OneTime = () => {
         Complete daily tasks and get <br /> bonuses in the form of tokens.
       </p>
       <ul className="task-list">
-        {[...Array(8)].map((_, index) => (
-          <React.Fragment key={index}>
-            <li className="task-list--item">
-              <div className="task-info">
+        {tasks.length > 0 ? (
+          tasks.map((task) => (
+            <React.Fragment key={task.id}>
+              <li className="task-list--item">
                 <span className="task-img"></span>
                 <div className="task-text">
-                  <p className="task-title">Complete Afterland’s Tutorial</p>
-                  <p className="task-day">1 day</p>
+                  <p className="task-title">{task.title}</p>
+                  <p className="task-day">{task.description}</p>
                 </div>
-              </div>
-              <div className="task-buttons">
-                <button
-                  className={`task-btn ${
-                    taskStatus[index] === "completed"
-                      ? "task-btn-completed"
-                      : taskStatus[index] === "in-progress"
-                      ? "task-btn-in-progress"
-                      : ""
-                  }`}
-                  onClick={() => handleTaskClick(index)}
-                  disabled={taskStatus[index] === "completed"}
-                >
-                  {taskStatus[index] === "completed" ? (
-                    "Completed"
-                  ) : taskStatus[index] === "in-progress" ? (
-                    <span className="cross-icon"></span>
+                <div className="task-buttons">
+                  {boosted.forTask?.paid ? (
+                    <button className="task-btn" disabled>
+                      Completed
+                    </button>
+                  ) : taskStatus[task.id] === "Completed" ? (
+                    <button className="task-btn" disabled>
+                      Completed
+                    </button>
+                  ) : taskStatus[task.id] === "Verify" ? (
+                    <button
+                      className="task-btn"
+                      onClick={() => handleVerifyClick(task)}
+                      disabled={loadingStatus[task.id]}
+                    >
+                      {loadingStatus[task.id] ? "Loading..." : "Verify"}
+                    </button>
                   ) : (
-                    "Complete"
+                    <button
+                      className="task-btn"
+                      onClick={() => handleCompleteClick(task)}
+                      disabled={loadingStatus[task.id]}
+                    >
+                      Start
+                    </button>
                   )}
-                </button>
-              </div>
-            </li>
-            {index < 7 && <hr />}
-          </React.Fragment>
-        ))}
+                </div>
+              </li>
+              {tasks.indexOf(task) < tasks.length - 1 && <hr />}
+            </React.Fragment>
+          ))
+        ) : (
+          <p>Loading tasks...</p>
+        )}
         <hr className="last-hr" />
       </ul>
-      <Navigetion />
+      <Navigation />
     </div>
   );
 };

@@ -1,5 +1,4 @@
-import React from "react";
-import images from "../images/images";
+import images from "../assets/images/images.jsx";
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";

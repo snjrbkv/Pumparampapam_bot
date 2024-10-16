@@ -1,26 +1,55 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import StarBtnModal from "../components/starBtn";
-import Navigation from "../components/navigetion";
+import ModalFriends from "../components/ModalFriends.jsx";
+import Navigation from "../components/navigetion.jsx";
 import "../App.css";
-import Images from "../images/images";
-import icons from "../icons/icons";
+import Images from "../assets/images/images.jsx";
+import icons from "../assets/icons/icons.jsx";
+import {
+  TonConnectButton,
+  useTonConnectUI,
+  useTonWallet,
+  useTonAddress,
+} from "@tonconnect/ui-react";
+import { Display } from "react-bootstrap-icons";
 
 const Friends = () => {
   const [showModal, setShowModal] = useState(false); // Состояние для отображения модала
   const [referals, setReferals] = useState([]); // Состояние для хранения данных
   const [initData, setInitData] = useState(null); // Состояние для хранения initData
-  // const [userPhoto, setUserPhoto] = useState(icons.profile);
+  const [expandedUserIndex, setExpandedUserIndex] = useState(null); // Для отслеживания, какой друг раскрыт
   const [referralLink, setReferralLink] = useState(""); // Состояние для хранения реферальной ссылки
+  const [walletEligible, setWalletEligible] = useState(false); // Состояние для отображения кнопки подключения кошелька
+  const [boosted, setBoosted] = useState({});
+  const [tonConnectUi] = useTonConnectUI();
+  const userFriendlyAddress = useTonAddress();
+  const wallet = useTonWallet();
+
 
   useEffect(() => {
     const telegram = window.Telegram?.WebApp;
     if (telegram) {
       telegram.ready();
       const user = telegram.initDataUnsafe?.user;
-
       if (user) {
         setInitData(telegram.initData); // Сохраняем initData для последующей отправки
+        const getUserData = async () => {
+          await axios
+            .post("https://api.pumparam.ru/api/get-user/", 
+              {initData: telegram.initData},
+              {headers: {
+                "Content-Type": "application/json; charset=utf-8",
+              },
+            })
+            .then((res) => {
+              setBoosted(res.data?.boosted);
+            })
+            .catch((error) => {
+              console.error("Error getting user data:", error);
+              window.location.reload();
+            });
+          };
+        getUserData();
       } else {
         console.error("User data is not available.");
       }
@@ -31,7 +60,45 @@ const Friends = () => {
     }
   }, []);
 
-  // Запрос на получение рефералов с использованием initData и userUuid
+
+  useEffect(() => {
+    if (wallet) {
+      let connectedWallet = localStorage.getItem("connectedWallet");
+      let allowWallet = localStorage.getItem("allowWallet");
+      if (connectedWallet == null && allowWallet == 'I05pbmV0eURldg==') {
+        const addWallet = async () => {
+          try {
+            const response = await axios.post(
+              "https://api.pumparam.ru/api/set-wallet/",
+              {
+                initData: initData,
+                address: userFriendlyAddress,
+                wallet_app: wallet.appName,
+              },
+              {
+                headers: {
+                  "Content-Type": "application/json; charset=utf-8",
+                },
+              }
+            );
+
+            if (response?.data?.ok) {
+              console.log("Wallet successfully added.");
+              localStorage.setItem("connectedWallet", wallet.appName);
+              localStorage.removeItem("allowWallet");
+            } else {
+              console.error("Failed to add the wallet:", response.data);
+            }
+          } catch (Error) {
+            console.error("Error adding the wallet:", Error);
+          }
+        };
+
+        addWallet();
+      }
+    }
+  }, [wallet, userFriendlyAddress, initData]);
+
   useEffect(() => {
     const fetchReferals = async () => {
       try {
@@ -40,16 +107,16 @@ const Friends = () => {
           return;
         }
 
-        const userUuid = localStorage.getItem("userUuid"); // Получаем userUuid из локального хранилища
+        const userUuid = localStorage.getItem("userUuid");
         const dataToSend = {
-          initData, // Отправляем initData
-          userUuid, // Отправляем userUuid для идентификации пользователя
+          initData,
+          userUuid,
         };
 
         if (userUuid) {
           const response = await axios.post(
-            `https://api.bot-dev.uz/api/get-referrals/${userUuid}`,
-            dataToSend, // Отправляем initData и userUuid
+            `https://api.pumparam.ru/api/get-referrals/${userUuid}`,
+            dataToSend,
             {
               headers: {
                 "Content-Type": "application/json; charset=utf-8",
@@ -59,21 +126,32 @@ const Friends = () => {
 
           if (response.data && Array.isArray(response.data.referrals)) {
             setReferals(response.data.referrals);
+
+            // Проверяем, пригласил ли каждый друг 3 человека
+            const friendsWithThreeReferrals = response.data.referrals.filter(
+              (ref) => ref.referrals.length >= 3
+            ).length;
+
+            // Если 3 друга пригласили по 3 человека
+            if (friendsWithThreeReferrals >= 3) {
+              setWalletEligible(true);
+            } else {
+              setWalletEligible(false);
+            }
           } else {
-            setReferals([]); // Если данных нет, устанавливаем пустой массив
+            setReferals([]);
           }
 
-          setReferralLink(response.data?.referral_link || ""); // Сохраняем реферальную ссылку
+          setReferralLink(response.data?.referral_link || "");
         }
       } catch (error) {
         console.error("Error fetching referals:", error);
       }
     };
 
-    fetchReferals(); // Вызываем функцию получения данных
+    fetchReferals();
   }, [initData]);
 
-  // Функция копирования ссылки в буфер обмена
   const handleCopyLink = () => {
     if (referralLink) {
       navigator.clipboard
@@ -89,7 +167,6 @@ const Friends = () => {
     }
   };
 
-  // Функция для открытия окна пересылки
   const handleSendLink = () => {
     const telegram = window.Telegram?.WebApp;
     if (referralLink && telegram) {
@@ -101,8 +178,26 @@ const Friends = () => {
     }
   };
 
-  const handleShow = () => setShowModal(true); // Открыть модал
-  const handleClose = () => setShowModal(false); // Закрыть модал
+  const handleConnect = () => {
+    if (!wallet) {
+      localStorage.setItem("allowWallet", "I05pbmV0eURldg==");
+      tonConnectUi.openModal();
+    }
+  };
+
+  const handleShow = () => setShowModal(true);
+  const handleClose = () => setShowModal(false);
+
+  const toggleExpand = (index) => {
+    setExpandedUserIndex(expandedUserIndex === index ? null : index);
+  };
+
+  const addressShortner = (address) => {
+    if (!address) return '';
+    const firstPart = address.slice(0, 4); // First 4 characters
+    const lastPart = address.slice(-4); // Last 4 characters
+    return `${firstPart}...${lastPart}`;
+  };
 
   return (
     <div className="friends-in">
@@ -116,15 +211,22 @@ const Friends = () => {
         </div>
       )}
 
-      <hr />
+      {/* somsa popravka */}
 
-      <StarBtnModal className="friend-star-btn" />
+      <TonConnectButton className="ton-connect-btn" />
+
+      {(!boosted.forReferral?.paid && !walletEligible) && (
+        <>
+          <hr />
+          <ModalFriends className="friend-star-btn" task_paid={boosted.forReferral?.paid} />
+        </>
+      )}
 
       <hr />
 
       {referals.length === 0 && (
         <h2>
-          You haven't invited any <br /> friends yet
+          You havent invited any <br /> friends yet
         </h2>
       )}
       {referals.length === 0 && (
@@ -136,18 +238,24 @@ const Friends = () => {
       {referals.length === 0 && (
         <img src={Images.friendsBg} alt="" className="friends-img" />
       )}
-      {/* Отображаем полученные рефералы */}
+
       {referals && referals.length > 0 ? (
         <ul className="friend-list">
           {referals.map((user, index) => (
             <React.Fragment key={index}>
-              <li className="friend-list--item w-100">
-                <div className="friend-info w-100">
+              <li
+                className="friend-list--item w-100"
+                onClick={() => toggleExpand(index)}
+              >
+                <div
+                  className="friend-info w-100"
+                  style={{ cursor: "pointer" }}
+                >
                   <span className="friend-img">
                     <img
                       src={
                         user.photo
-                          ? `https://api.bot-dev.uz/${user.photo}`
+                          ? `https://api.pumparam.ru/${user.photo}`
                           : icons.profile
                       }
                       className="w-100"
@@ -158,52 +266,62 @@ const Friends = () => {
                     <p className="friend-title">
                       {user.username || user.first_name}
                     </p>
+                    {user.referrals.length >= 3 && (
+                      <p className="con-status">
+                        <img src={icons.conected} alt="Connected" />
+                      </p>
+                    )}
                   </div>
                 </div>
               </li>
 
-              {/* Вложенные рефералы */}
-              {user.referrals &&
-                user.referrals.length > 0 &&
-                user.referrals.map((subUser, subIndex) => (
-                  <li className="friend-list--item w-100" key={subIndex}>
-                    <div className="friend-info w-100">
-                      <span className="friend-img">
-                        <img
-                          src={
-                            subUser.photo
-                              ? `https://api.bot-dev.uz/${subUser.photo}`
-                              : icons.profile
-                          }
-                          className="w-100"
-                          alt="user"
-                        />
-                      </span>
-                      <div className="friend-text">
-                        <p className="friend-title">
-                          {subUser.username || subUser.first_name}
-                        </p>
-                      </div>
-                    </div>
-                  </li>
-                ))}
+              {expandedUserIndex === index &&
+                user.referrals &&
+                user.referrals.length > 0 && (
+                  <ul>
+                    {user.referrals.map((subUser, subIndex) => (
+                      <li className="friend-list--item w-100" key={subIndex}>
+                        <div className="friend-info w-100">
+                          <span className="friend-img">
+                            <img
+                              src={
+                                subUser.photo
+                                  ? `https://api.pumparam.ru/${subUser.photo}`
+                                  : icons.profile
+                              }
+                              className="w-100"
+                              alt="user"
+                            />
+                          </span>
+                          <div className="friend-text">
+                            <p className="friend-title">
+                              {subUser.username || subUser.first_name}
+                            </p>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
             </React.Fragment>
           ))}
         </ul>
       ) : null}
 
-      {/* Кнопка для открытия модала */}
-      {referals.length <= 3 && (
+      {(walletEligible || boosted.forReferral?.paid) ? (
+        <div
+          className={`friends-btn green-btn`}
+          onClick={handleConnect}
+        >
+          {wallet ? "Connected" : "Connect"} Wallet
+          <br /> <span className='mini'>{addressShortner(userFriendlyAddress)}</span>
+        </div>
+      ) : (
         <div className="green-btn friends-btn" onClick={handleShow}>
-          Invite friends
+          Invite Friends
         </div>
       )}
 
-      {referals.length >= 3 && (
-        <div className="green-btn friends-btn">Connect wallet</div>
-      )}
-
-      {/* Модальное окно */}
       {showModal && (
         <div className="custom-modal-overlay " onClick={handleClose}>
           <div
@@ -211,24 +329,35 @@ const Friends = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="custom-modal-header">
+              <div></div>
               <h3>Invite friends</h3>
               <button className="custom-close-btn" onClick={handleClose}>
                 &times;
               </button>
             </div>
             <hr />
+
             <div className="custom-modal-body">
-              <button className="custom-invite-btn" onClick={handleCopyLink}>
-                <img src={icons.copy} alt="" /> Copy the link
-              </button>
-              <button className="custom-invite-btn" onClick={handleSendLink}>
-                <img src={icons.send} alt="" /> Send a link
-              </button>
+              <div className="modal-btn-container">
+                <button
+                  className="green-btn modal-btn"
+                  onClick={handleCopyLink}
+                  style={{ position: "relative" }}
+                >
+                  Copy link
+                </button>
+                <button
+                  className="green-btn modal-btn"
+                  style={{ position: "relative" }}
+                  onClick={handleSendLink}
+                >
+                  Send to Telegram
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
-
       <Navigation />
     </div>
   );
